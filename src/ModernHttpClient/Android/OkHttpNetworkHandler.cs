@@ -8,10 +8,7 @@ using System.Net.Http;
 using Square.OkHttp;
 using Javax.Net.Ssl;
 using System.Text.RegularExpressions;
-using Java.IO;
 using System.Security.Cryptography.X509Certificates;
-using System.Globalization;
-using Android.OS;
 
 namespace ModernHttpClient
 {
@@ -173,7 +170,7 @@ namespace ModernHttpClient
                     tcs.TrySetException(new WebException(p1.LocalizedMessage, WebExceptionStatus.TrustFailure));
                 } else if (p1.Message.ToLowerInvariant().Contains("canceled"))
                 {
-                    tcs.TrySetException(new Android.OS.OperationCanceledException());
+                    tcs.TrySetException(new OperationCanceledException());
                 } else {
                     tcs.TrySetException(new WebException(p1.Message));
                 }
