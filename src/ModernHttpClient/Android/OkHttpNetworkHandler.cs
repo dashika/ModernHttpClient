@@ -12,255 +12,255 @@ using System.Security.Cryptography.X509Certificates;
 
 namespace ModernHttpClient
 {
-	public class NativeMessageHandler : HttpClientHandler
-	{
-		readonly OkHttpClient client = new OkHttpClient();
-		readonly CacheControl noCacheCacheControl = default(CacheControl);
-		readonly bool throwOnCaptiveNetwork;
+    public class NativeMessageHandler : HttpClientHandler
+    {
+        readonly OkHttpClient client = new OkHttpClient();
+        readonly CacheControl noCacheCacheControl = default(CacheControl);
+        readonly bool throwOnCaptiveNetwork;
 
-		readonly Dictionary<HttpRequestMessage, WeakReference> registeredProgressCallbacks =
-			new Dictionary<HttpRequestMessage, WeakReference>();
-		readonly Dictionary<string, string> headerSeparators =
-			new Dictionary<string, string>(){
-				{"User-Agent", " "}
-			};
+        readonly Dictionary<HttpRequestMessage, WeakReference> registeredProgressCallbacks =
+            new Dictionary<HttpRequestMessage, WeakReference>();
+        readonly Dictionary<string, string> headerSeparators =
+            new Dictionary<string, string>(){
+                {"User-Agent", " "}
+            };
 
-		public bool DisableCaching { get; set; }
+        public bool DisableCaching { get; set; }
 
-		public NativeMessageHandler() : this(false, false) { }
+        public NativeMessageHandler() : this(false, false) { }
 
-		public NativeMessageHandler(bool throwOnCaptiveNetwork, bool customSSLVerification, NativeCookieHandler cookieHandler = null)
-		{
-			this.throwOnCaptiveNetwork = throwOnCaptiveNetwork;
+        public NativeMessageHandler(bool throwOnCaptiveNetwork, bool customSSLVerification, NativeCookieHandler cookieHandler = null)
+        {
+            this.throwOnCaptiveNetwork = throwOnCaptiveNetwork;
 
-			if (customSSLVerification) client.SetHostnameVerifier(new HostnameVerifier());
-			noCacheCacheControl = (new CacheControl.Builder()).NoCache().Build();
-		}
+            if (customSSLVerification) client.SetHostnameVerifier(new HostnameVerifier());
+            noCacheCacheControl = (new CacheControl.Builder()).NoCache().Build();
+        }
 
-		public void RegisterForProgress(HttpRequestMessage request, ProgressDelegate callback)
-		{
-			if (callback == null && registeredProgressCallbacks.ContainsKey(request))
-			{
-				registeredProgressCallbacks.Remove(request);
-				return;
-			}
+        public void RegisterForProgress(HttpRequestMessage request, ProgressDelegate callback)
+        {
+            if (callback == null && registeredProgressCallbacks.ContainsKey(request))
+            {
+                registeredProgressCallbacks.Remove(request);
+                return;
+            }
 
-			registeredProgressCallbacks[request] = new WeakReference(callback);
-		}
+            registeredProgressCallbacks[request] = new WeakReference(callback);
+        }
 
-		ProgressDelegate getAndRemoveCallbackFromRegister(HttpRequestMessage request)
-		{
-			ProgressDelegate emptyDelegate = delegate { };
+        ProgressDelegate getAndRemoveCallbackFromRegister(HttpRequestMessage request)
+        {
+            ProgressDelegate emptyDelegate = delegate { };
 
-			lock (registeredProgressCallbacks)
-			{
-				if (!registeredProgressCallbacks.ContainsKey(request)) return emptyDelegate;
+            lock (registeredProgressCallbacks)
+            {
+                if (!registeredProgressCallbacks.ContainsKey(request)) return emptyDelegate;
 
-				var weakRef = registeredProgressCallbacks[request];
-				if (weakRef == null) return emptyDelegate;
+                var weakRef = registeredProgressCallbacks[request];
+                if (weakRef == null) return emptyDelegate;
 
-				if (!(weakRef.Target is ProgressDelegate callback)) return emptyDelegate;
+                if (!(weakRef.Target is ProgressDelegate callback)) return emptyDelegate;
 
-				registeredProgressCallbacks.Remove(request);
-				return callback;
-			}
-		}
+                registeredProgressCallbacks.Remove(request);
+                return callback;
+            }
+        }
 
-		string getHeaderSeparator(string name)
-		{
-			return headerSeparators.ContainsKey(name) ? headerSeparators[name] : ",";
-		}
+        string getHeaderSeparator(string name)
+        {
+            return headerSeparators.ContainsKey(name) ? headerSeparators[name] : ",";
+        }
 
-		protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-		{
-			var java_uri = request.RequestUri.GetComponents(UriComponents.AbsoluteUri, UriFormat.UriEscaped);
-			var url = new Java.Net.URL(java_uri);
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var java_uri = request.RequestUri.GetComponents(UriComponents.AbsoluteUri, UriFormat.UriEscaped);
+            var url = new Java.Net.URL(java_uri);
 
-			var body = default(RequestBody);
-			if (request.Content != null)
-			{
-				var bytes = await request.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+            var body = default(RequestBody);
+            if (request.Content != null)
+            {
+                var bytes = await request.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
 
-				var contentType = "text/plain";
-				if (request.Content.Headers.ContentType != null)
-				{
-					contentType = String.Join(" ", request.Content.Headers.GetValues("Content-Type"));
-				}
-				body = RequestBody.Create(MediaType.Parse(contentType), bytes);
-			}
+                var contentType = "text/plain";
+                if (request.Content.Headers.ContentType != null)
+                {
+                    contentType = String.Join(" ", request.Content.Headers.GetValues("Content-Type"));
+                }
+                body = RequestBody.Create(MediaType.Parse(contentType), bytes);
+            }
 
-			var builder = new Request.Builder()
-				.Method(request.Method.Method.ToUpperInvariant(), body)
-				.Url(url);
+            var builder = new Request.Builder()
+                .Method(request.Method.Method.ToUpperInvariant(), body)
+                .Url(url);
 
-			if (DisableCaching)
-			{
-				builder.CacheControl(noCacheCacheControl);
-			}
+            if (DisableCaching)
+            {
+                builder.CacheControl(noCacheCacheControl);
+            }
 
-			var keyValuePairs = request.Headers
-				.Union(request.Content != null ?
-					(IEnumerable<KeyValuePair<string, IEnumerable<string>>>)request.Content.Headers :
-					Enumerable.Empty<KeyValuePair<string, IEnumerable<string>>>());
+            var keyValuePairs = request.Headers
+                .Union(request.Content != null ?
+                    (IEnumerable<KeyValuePair<string, IEnumerable<string>>>)request.Content.Headers :
+                    Enumerable.Empty<KeyValuePair<string, IEnumerable<string>>>());
 
-			foreach (var kvp in keyValuePairs) builder.AddHeader(kvp.Key, String.Join(getHeaderSeparator(kvp.Key), kvp.Value));
+            foreach (var kvp in keyValuePairs) builder.AddHeader(kvp.Key, String.Join(getHeaderSeparator(kvp.Key), kvp.Value));
 
-			cancellationToken.ThrowIfCancellationRequested();
+            cancellationToken.ThrowIfCancellationRequested();
 
-			var rq = builder.Build();
-			var call = client.NewCall(rq);
+            var rq = builder.Build();
+            var call = client.NewCall(rq);
 
-			// NB: Even closing a socket must be done off the UI thread. Cray!
-			cancellationToken.Register(() => Task.Run(() => call.Cancel()));
+            // NB: Even closing a socket must be done off the UI thread. Cray!
+            cancellationToken.Register(() => Task.Run(() => call.Cancel()));
 
-			var resp = await call.EnqueueAsync().ConfigureAwait(false);
-			var newReq = resp.Request();
-			var newUri = newReq?.Uri();
-			request.RequestUri = new Uri(newUri.ToString());
-			if (throwOnCaptiveNetwork && newUri != null)
-			{
-				if (url.Host != newUri.Host)
-				{
-					throw new CaptiveNetworkException(new Uri(java_uri), new Uri(newUri.ToString()));
-				}
-			}
+            var resp = await call.EnqueueAsync().ConfigureAwait(false);
+            var newReq = resp.Request();
+            var newUri = newReq?.Uri();
+            request.RequestUri = new Uri(newUri.ToString());
+            if (throwOnCaptiveNetwork && newUri != null)
+            {
+                if (url.Host != newUri.Host)
+                {
+                    throw new CaptiveNetworkException(new Uri(java_uri), new Uri(newUri.ToString()));
+                }
+            }
 
-			var respBody = resp.Body();
+            var respBody = resp.Body();
 
-			cancellationToken.ThrowIfCancellationRequested();
+            cancellationToken.ThrowIfCancellationRequested();
 
-			var ret = new HttpResponseMessage((HttpStatusCode)resp.Code());
-			ret.RequestMessage = request;
-			ret.ReasonPhrase = resp.Message();
-			if (respBody != null)
-			{
-				var content = new ProgressStreamContent(respBody.ByteStream(), CancellationToken.None);
-				content.Progress = getAndRemoveCallbackFromRegister(request);
-				ret.Content = content;
-			}
-			else
-			{
-				ret.Content = new ByteArrayContent(new byte[0]);
-			}
+            var ret = new HttpResponseMessage((HttpStatusCode)resp.Code());
+            ret.RequestMessage = request;
+            ret.ReasonPhrase = resp.Message();
+            if (respBody != null)
+            {
+                var content = new ProgressStreamContent(respBody.ByteStream(), CancellationToken.None);
+                content.Progress = getAndRemoveCallbackFromRegister(request);
+                ret.Content = content;
+            }
+            else
+            {
+                ret.Content = new ByteArrayContent(new byte[0]);
+            }
 
-			var respHeaders = resp.Headers();
-			foreach (var k in respHeaders.Names())
-			{
-				ret.Headers.TryAddWithoutValidation(k, respHeaders.Get(k));
-				ret.Content.Headers.TryAddWithoutValidation(k, respHeaders.Get(k));
-			}
+            var respHeaders = resp.Headers();
+            foreach (var k in respHeaders.Names())
+            {
+                ret.Headers.TryAddWithoutValidation(k, respHeaders.Get(k));
+                ret.Content.Headers.TryAddWithoutValidation(k, respHeaders.Get(k));
+            }
 
-			return ret;
-		}
-	}
+            return ret;
+        }
+    }
 
-	public static class AwaitableOkHttp
-	{
-		public static Task<Response> EnqueueAsync(this Call This)
-		{
-			var cb = new OkTaskCallback();
-			This.Enqueue(cb);
+    public static class AwaitableOkHttp
+    {
+        public static Task<Response> EnqueueAsync(this Call This)
+        {
+            var cb = new OkTaskCallback();
+            This.Enqueue(cb);
 
-			return cb.Task;
-		}
+            return cb.Task;
+        }
 
-		class OkTaskCallback : Java.Lang.Object, ICallback
-		{
-			readonly TaskCompletionSource<Response> tcs = new TaskCompletionSource<Response>();
-			public Task<Response> Task { get { return tcs.Task; } }
+        class OkTaskCallback : Java.Lang.Object, ICallback
+        {
+            readonly TaskCompletionSource<Response> tcs = new TaskCompletionSource<Response>();
+            public Task<Response> Task { get { return tcs.Task; } }
 
-			public void OnFailure(Request p0, Java.IO.IOException p1)
-			{
-				// Kind of a hack, but the simplest way to find out that server cert. validation failed
-				if (p1.Message == $"Hostname '{p0.Url().Host}' was not verified")
-				{
-					tcs.TrySetException(new WebException(p1.LocalizedMessage, WebExceptionStatus.TrustFailure));
-				}
-				else if (p1.Message.ToLowerInvariant().Contains("canceled"))
-				{
-					tcs.TrySetException(new OperationCanceledException());
-				}
-				else
-				{
-					tcs.TrySetException(new WebException(p1.Message));
-				}
-			}
+            public void OnFailure(Request p0, Java.IO.IOException p1)
+            {
+                // Kind of a hack, but the simplest way to find out that server cert. validation failed
+                if (p1.Message == $"Hostname '{p0.Url().Host}' was not verified")
+                {
+                    tcs.TrySetException(new WebException(p1.LocalizedMessage, WebExceptionStatus.TrustFailure));
+                }
+                else if (p1.Message.ToLowerInvariant().Contains("canceled"))
+                {
+                    tcs.TrySetException(new OperationCanceledException());
+                }
+                else
+                {
+                    tcs.TrySetException(new WebException(p1.Message));
+                }
+            }
 
-			public void OnResponse(Response p0)
-			{
-				tcs.TrySetResult(p0);
-			}
-		}
-	}
+            public void OnResponse(Response p0)
+            {
+                tcs.TrySetResult(p0);
+            }
+        }
+    }
 
-	class HostnameVerifier : Java.Lang.Object, IHostnameVerifier
-	{
-		static readonly Regex cnRegex = new Regex(@"CN\s*=\s*([^,]*)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
+    class HostnameVerifier : Java.Lang.Object, IHostnameVerifier
+    {
+        static readonly Regex cnRegex = new Regex(@"CN\s*=\s*([^,]*)", RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.Singleline);
 
-		public bool Verify(string hostname, ISSLSession session)
-		{
-			return verifyServerCertificate(hostname, session);
-		}
+        public bool Verify(string hostname, ISSLSession session)
+        {
+            return verifyServerCertificate(hostname, session);
+        }
 
-		/// <summary>
-		/// Verifies the server certificate by calling into ServicePointManager.ServerCertificateValidationCallback or,
-		/// if the is no delegate attached to it by using the default hostname verifier.
-		/// </summary>
-		/// <returns><c>true</c>, if server certificate was verifyed, <c>false</c> otherwise.</returns>
-		/// <param name="hostname"></param>
-		/// <param name="session"></param>
-		static bool verifyServerCertificate(string hostname, ISSLSession session)
-		{
-			var defaultVerifier = HttpsURLConnection.DefaultHostnameVerifier;
+        /// <summary>
+        /// Verifies the server certificate by calling into ServicePointManager.ServerCertificateValidationCallback or,
+        /// if the is no delegate attached to it by using the default hostname verifier.
+        /// </summary>
+        /// <returns><c>true</c>, if server certificate was verifyed, <c>false</c> otherwise.</returns>
+        /// <param name="hostname"></param>
+        /// <param name="session"></param>
+        static bool verifyServerCertificate(string hostname, ISSLSession session)
+        {
+            var defaultVerifier = HttpsURLConnection.DefaultHostnameVerifier;
 
-			if (ServicePointManager.ServerCertificateValidationCallback == null) return defaultVerifier.Verify(hostname, session);
+            if (ServicePointManager.ServerCertificateValidationCallback == null) return defaultVerifier.Verify(hostname, session);
 
-			// Convert java certificates to .NET certificates and build cert chain from root certificate
-			var certificates = session.GetPeerCertificateChain();
-			var chain = new X509Chain();
-			var errors = System.Net.Security.SslPolicyErrors.None;
+            // Convert java certificates to .NET certificates and build cert chain from root certificate
+            var certificates = session.GetPeerCertificateChain();
+            var chain = new X509Chain();
+            var errors = System.Net.Security.SslPolicyErrors.None;
 
-			// Build certificate chain and check for errors
-			if (certificates == null || certificates.Length == 0)
-			{//no cert at all
-				errors = System.Net.Security.SslPolicyErrors.RemoteCertificateNotAvailable;
-				return ServicePointManager.ServerCertificateValidationCallback(hostname, null, chain, errors);
-			}
+            // Build certificate chain and check for errors
+            if (certificates == null || certificates.Length == 0)
+            {//no cert at all
+                errors = System.Net.Security.SslPolicyErrors.RemoteCertificateNotAvailable;
+                return ServicePointManager.ServerCertificateValidationCallback(hostname, null, chain, errors);
+            }
 
-			if (certificates.Length == 1)
-			{//no root?
-				errors = System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors;
-				return ServicePointManager.ServerCertificateValidationCallback(hostname, null, chain, errors);
-			}
+            if (certificates.Length == 1)
+            {//no root?
+                errors = System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors;
+                return ServicePointManager.ServerCertificateValidationCallback(hostname, null, chain, errors);
+            }
 
-			var netCerts = certificates.Select(x => new X509Certificate2(x.GetEncoded())).ToArray();
+            var netCerts = certificates.Select(x => new X509Certificate2(x.GetEncoded())).ToArray();
 
-			for (int i = 1; i < netCerts.Length; i++)
-			{
-				chain.ChainPolicy.ExtraStore.Add(netCerts[i]);
-			}
+            for (int i = 1; i < netCerts.Length; i++)
+            {
+                chain.ChainPolicy.ExtraStore.Add(netCerts[i]);
+            }
 
-			var root = netCerts[0];
+            var root = netCerts[0];
 
-			chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
-			chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-			chain.ChainPolicy.UrlRetrievalTimeout = new TimeSpan(0, 1, 0);
-			chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
+            chain.ChainPolicy.RevocationFlag = X509RevocationFlag.EntireChain;
+            chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+            chain.ChainPolicy.UrlRetrievalTimeout = new TimeSpan(0, 1, 0);
+            chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
 
-			if (!chain.Build(root))
-			{
-				errors = System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors;
-				return ServicePointManager.ServerCertificateValidationCallback(hostname, root, chain, errors);
-			}
+            if (!chain.Build(root))
+            {
+                errors = System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors;
+                return ServicePointManager.ServerCertificateValidationCallback(hostname, root, chain, errors);
+            }
 
-			var subject = root.Subject;
-			var subjectCn = cnRegex.Match(subject).Groups[1].Value;
+            var subject = root.Subject;
+            var subjectCn = cnRegex.Match(subject).Groups[1].Value;
 
-			if (String.IsNullOrWhiteSpace(subjectCn) || !Utility.MatchHostnameToPattern(hostname, subjectCn))
-			{
-				errors = System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch;
-			}
-			return ServicePointManager.ServerCertificateValidationCallback(hostname, root, chain, errors);
-		}
-	}
+            if (String.IsNullOrWhiteSpace(subjectCn) || !Utility.MatchHostnameToPattern(hostname, subjectCn))
+            {
+                errors = System.Net.Security.SslPolicyErrors.RemoteCertificateNameMismatch;
+            }
+            return ServicePointManager.ServerCertificateValidationCallback(hostname, root, chain, errors);
+        }
+    }
 }
